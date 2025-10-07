@@ -25,7 +25,7 @@ try:
 
         for i in range (10):
             phi = (math.pi / 11) * i
-            B = (math.sin(2 * math.pi * f * t - phi)) **
+            B = (math.sin(2 * math.pi * f * t - phi)) ** 2
             dc = B * 100
             pwms[i].ChangeDutyCycle(dc)
 
