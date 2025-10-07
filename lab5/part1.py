@@ -26,5 +26,5 @@ try:
 
 except KeyboardInterrupt: # stop gracefully on ctrl-C
     print('\nExiting')
-pwm.stop()
-GPIO.cleanup()
+    pwm.stop()
+    GPIO.cleanup()
