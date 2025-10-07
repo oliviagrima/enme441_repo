@@ -4,7 +4,7 @@ import math
 
 GPIO.setmode(GPIO.BCM) 
 p1 = 18
-p2 = 13
+p2 = 15
 GPIO.setup(p1, GPIO.OUT)
 GPIO.setup(p2, GPIO.OUT)
 
