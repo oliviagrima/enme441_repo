@@ -1,31 +1,38 @@
+# shifter.py
 import RPi.GPIO as GPIO
 import time
 
-GPIO.setmode(GPIO.BCM)
+class Shifter:
+    def __init__(self, serialPin, clockPin, latchPin):
+        self.serialPin = serialPin
+        self.clockPin = clockPin
+        self.latchPin = latchPin
 
-dataPin, latchPin, clockPin = 23, 24, 25
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.serialPin, GPIO.OUT)
+        GPIO.setup(self.clockPin, GPIO.OUT, initial=0)
+        GPIO.setup(self.latchPin, GPIO.OUT, initial=0)
 
-GPIO.setup(dataPin, GPIO.OUT)
-GPIO.setup(latchPin, GPIO.OUT, initial=0) # start latch & clock low
-GPIO.setup(clockPin, GPIO.OUT, initial=0)
+    def __ping(self, pin):  # método privado
+        GPIO.output(pin, 1)
+        time.sleep(0)
+        GPIO.output(pin, 0)
 
-pattern = 0b01100110 # pattern to display
+    def shiftByte(self, byte):  # método público
+        for i in range(8):
+            GPIO.output(self.serialPin, byte & (1 << i))
+            self.__ping(self.clockPin)
+        self.__ping(self.latchPin)
 
-def ping(p): # ping the clock or latch pin
-    GPIO.output(p,1)
-    time.sleep(0)
-    GPIO.output(p,0)
+from shifter import Shifter
+import time
 
-def shiftByte(b): # send a byte of data to the output
-    for i in range(8):
-        GPIO.output(dataPin, b & (1<<i))
-        ping(clockPin) # add bit to register
-    ping(latchPin) # send register to output
+s = Shifter(23, 25, 24)  # serialPin, clockPin, latchPin
 
 try:
-    while 1:
+    while True:
         for i in range(2**8):
-            shiftByte(i)
+            s.shiftByte(i)
             time.sleep(0.5)
-except:
+except KeyboardInterrupt:
     GPIO.cleanup()
