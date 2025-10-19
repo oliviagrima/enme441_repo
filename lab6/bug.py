@@ -5,6 +5,8 @@ import random
 import threading
 import RPi.GPIO as GPIO
 
+DEBOUNCE_TIME = 0.2  # segundos para debounce de los switches
+
 class Bug:
     def __init__(self, timestep=0.1, x=3, isWrapOn=False):
         self.timestep = timestep
@@ -42,25 +44,25 @@ class Bug:
         self.__shifter.shiftByte(0)
 
 
-# Bloque ejecutable para controlar el Bug con switches
 if __name__ == "__main__":
     # Pines de los switches
     s1_pin = 17  # enciende/apaga Bug
     s2_pin = 27  # cambia wrapping
     s3_pin = 22  # aumenta velocidad 3x
 
-    # Configurar pines con pull-up interno porque los switches van a GND
     GPIO.setmode(GPIO.BCM)
+    # Configuración con pull-up interno (switch conectado a GND)
     GPIO.setup(s1_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(s2_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     GPIO.setup(s3_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     b = Bug()
-    prev_s2 = GPIO.input(s2_pin)
+    prev_s2 = not GPIO.input(s2_pin)
+    prev_s3 = not GPIO.input(s3_pin)
 
     try:
         while True:
-            # Lectura de switches (invertida porque con pull-up)
+            # Lectura de switches (invertida porque conectados a GND)
             s1 = not GPIO.input(s1_pin)
             s2 = not GPIO.input(s2_pin)
             s3 = not GPIO.input(s3_pin)
@@ -71,16 +73,20 @@ if __name__ == "__main__":
             else:
                 b.stop()
 
-            # Cambiar wrapping si s2 cambia de estado
-            if s2 != prev_s2:
+            # Cambiar wrapping con debounce
+            if s2 != prev_s2 and s2:
                 b.isWrapOn = not b.isWrapOn
                 prev_s2 = s2
+                time.sleep(DEBOUNCE_TIME)  # debounce
 
-            # Ajustar velocidad con s3
-            if s3:
-                b.timestep = 0.1 / 3
-            else:
-                b.timestep = 0.1
+            # Ajustar velocidad con debounce
+            if s3 != prev_s3:
+                if s3:
+                    b.timestep = 0.1 / 3
+                else:
+                    b.timestep = 0.1
+                prev_s3 = s3
+                time.sleep(DEBOUNCE_TIME)
 
             time.sleep(0.01)
 
