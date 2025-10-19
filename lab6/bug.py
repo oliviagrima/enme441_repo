@@ -43,7 +43,7 @@ class Bug:
         if self.__thread:
             self.__thread.join()
         self.__shifter.shiftByte(0)
-        GPIO.cleanup()
+        # NO llamar a GPIO.cleanup() aquí
 
 
 # Bloque ejecutable para controlar el Bug con switches
@@ -53,12 +53,14 @@ if __name__ == "__main__":
     s2_pin = 27  # cambia wrapping
     s3_pin = 22  # aumenta velocidad 3x
 
+    # Configuración de los pines como entradas con pull-down
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(s1_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
     GPIO.setup(s2_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
     GPIO.setup(s3_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
-    b = Bug()  # valores por defecto
+    # Instanciar Bug con valores por defecto
+    b = Bug()
     prev_s2 = GPIO.input(s2_pin)
 
     try:
