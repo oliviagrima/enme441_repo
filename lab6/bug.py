@@ -16,9 +16,11 @@ class Bug:
 
     def __move(self):
         while self.__running:
+            # Encender LED en la posición actual
             byte = 1 << self.x
             self.__shifter.shiftByte(byte)
 
+            # Mover posición en random walk
             move = random.choice([-1, 1])
             self.x += move
 
@@ -35,15 +37,16 @@ class Bug:
     def start(self):
         if not self.__running:
             self.__running = True
+            # Iniciar el hilo que mueve el LED
             self.__thread = threading.Thread(target=self.__move)
             self.__thread.start()
 
     def stop(self):
-        self.__running = False
-        if self.__thread:
+        if self.__running:
+            self.__running = False
             self.__thread.join()
+        # Apagar LED cuando se detiene
         self.__shifter.shiftByte(0)
-        # NO llamar a GPIO.cleanup() aquí
 
 
 # Bloque ejecutable para controlar el Bug con switches
@@ -65,6 +68,7 @@ if __name__ == "__main__":
 
     try:
         while True:
+            # Leer switches
             s1 = GPIO.input(s1_pin)
             s2 = GPIO.input(s2_pin)
             s3 = GPIO.input(s3_pin)
