@@ -1,6 +1,8 @@
 from shifter import Shifter
 import time
 import random
+import RPi.GPIO as GPIO
+
 
 s = Shifter(serialPin=23, clockPin=25, latchPin=24)
 position = 3
