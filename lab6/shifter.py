@@ -9,7 +9,7 @@ GPIO.setup(dataPin, GPIO.OUT)
 GPIO.setup(latchPin, GPIO.OUT, initial=0)  # start latch & clock low
 GPIO.setup(clockPin, GPIO.OUT, initial=0)  
 
-pattern = 0b01110110        # 8-bit pattern to display on LED bar
+pattern = 0b01100110        # 8-bit pattern to display on LED bar
 
 for i in range(8):
   GPIO.output(dataPin, pattern & (1<<i))
