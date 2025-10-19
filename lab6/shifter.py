@@ -23,16 +23,3 @@ class Shifter:
             GPIO.output(self.serialPin, byte & (1 << i))
             self.__ping(self.clockPin)
         self.__ping(self.latchPin)
-
-from shifter import Shifter
-import time
-
-s = Shifter(23, 25, 24)  # serialPin, clockPin, latchPin
-
-try:
-    while True:
-        for i in range(2**8):
-            s.shiftByte(i)
-            time.sleep(0.5)
-except KeyboardInterrupt:
-    GPIO.cleanup()
