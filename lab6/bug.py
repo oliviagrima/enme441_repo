@@ -48,7 +48,7 @@ class Bug:
         # Apagar LED cuando se detiene
         self.__shifter.shiftByte(0)
 
-
+"""
 # Bloque ejecutable para controlar el Bug con switches
 if __name__ == "__main__":
     # Pines de los switches
@@ -95,3 +95,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         b.stop()
         GPIO.cleanup()
+"""
