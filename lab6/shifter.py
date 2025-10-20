@@ -1,4 +1,8 @@
-# shifter.py
+"""
+Olivia Grima
+ENME441 - Lab 6
+"""
+
 import RPi.GPIO as GPIO
 import time
 
@@ -13,12 +17,12 @@ class Shifter:
         GPIO.setup(self.clockPin, GPIO.OUT, initial=0)
         GPIO.setup(self.latchPin, GPIO.OUT, initial=0)
 
-    def __ping(self, pin):  # método privado
+    def __ping(self, pin):  # private method 
         GPIO.output(pin, 1)
         time.sleep(0)
         GPIO.output(pin, 0)
 
-    def shiftByte(self, byte):  # método público
+    def shiftByte(self, byte):  # public method
         for i in range(8):
             GPIO.output(self.serialPin, byte & (1 << i))
             self.__ping(self.clockPin)
