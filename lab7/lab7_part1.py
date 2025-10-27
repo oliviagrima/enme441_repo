@@ -1,21 +1,20 @@
 import RPi.GPIO as GPIO
 import socket
 
-# --- Configuración de los pines ---
+# --- Pines y PWM ---
 GPIO.setmode(GPIO.BCM)
 pins = [14, 15, 18]
+pwms = []
+
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
-
-# Inicializamos PWM a 1000 Hz
-pwms = [GPIO.PWM(p, 1000) for p in pins]
-for pwm in pwms:
+    pwm = GPIO.PWM(pin, 1000)
     pwm.start(0)
+    pwms.append(pwm)
 
-# --- Estado inicial de los LEDs ---
-led_brightness = [0, 0, 0]
+led_brightness = [0, 0, 0]  # Estado inicial
 
-# --- Generar HTML dinámico ---
+# --- HTML dinámico ---
 def generate_html(selected_led=0):
     slider_value = led_brightness[selected_led]
     html = f"""\
@@ -50,7 +49,7 @@ def parse_post_data(data):
     except:
         return None, None
 
-# --- Servidor ---
+# --- Servidor TCP ---
 def start_server(host="0.0.0.0", port=8080):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((host, port))
@@ -63,13 +62,17 @@ def start_server(host="0.0.0.0", port=8080):
 
             # Leer todo el request
             request_data = b""
-            while True:
-                chunk = conn.recv(1024)
-                if not chunk:
-                    break
-                request_data += chunk
-            request = request_data.decode(errors="ignore")
+            conn.settimeout(0.5)  # Evita bloqueo indefinido
+            try:
+                while True:
+                    chunk = conn.recv(1024)
+                    if not chunk:
+                        break
+                    request_data += chunk
+            except socket.timeout:
+                pass  # Terminamos de leer cuando no hay más datos
 
+            request = request_data.decode(errors="ignore")
             selected_led = 0
 
             # Procesar POST
@@ -81,14 +84,20 @@ def start_server(host="0.0.0.0", port=8080):
                     selected_led = led
                     print(f"→ LED {led+1} brightness set to {brightness}%")
 
-            # Generar HTML y enviar respuesta
+            # Generar respuesta HTTP
             html = generate_html(selected_led)
             response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}".format(len(html), html)
-            conn.sendall(response.encode())
+
+            try:
+                conn.sendall(response.encode())
+            except BrokenPipeError:
+                print("Cliente cerró la conexión antes de recibir la respuesta")
+
             conn.close()
 
     except KeyboardInterrupt:
         print("\nStopping server...")
+
     finally:
         for pwm in pwms:
             try:
