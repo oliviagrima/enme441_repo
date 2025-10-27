@@ -1,107 +1,132 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import RPi.GPIO as GPIO
-import urllib.parse
+import json
 
-# --- CONFIGURACIÓN DE LOS PINES ---
 GPIO.setmode(GPIO.BCM)
-pins = [14, 15, 18]  # LED1, LED2, LED3
+pins = [14, 15, 18]
 pwms = []
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
-    pwm = GPIO.PWM(pin, 1000)  # Frecuencia 1 kHz
+    pwm = GPIO.PWM(pin, 1000)
     pwm.start(0)
     pwms.append(pwm)
 
-# --- VALORES INICIALES ---
 led_brightness = [0, 0, 0]
 
-
-# --- FUNCIÓN PARA GENERAR LA PÁGINA HTML + JAVASCRIPT ---
-def generate_html():
-    return f"""\
+html_page = """\
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LED Control</title>
+    <meta charset="UTF-8">
+    <title>LED Control (AJAX)</title>
     <style>
-        body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }}
-        .slider-container {{ width: 300px; margin: 20px auto; text-align: left; }}
-        .slider-label {{ display: inline-block; width: 50px; }}
-        input[type=range] {{ width: 180px; vertical-align: middle; }}
-        .value-display {{ display: inline-block; width: 40px; text-align: right; font-weight: bold; }}
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: #fff;
+        }}
+        .container {{
+            border: 2px solid #000;
+            border-radius: 10px;
+            padding: 20px 40px;
+            display: inline-block;
+        }}
+        .row {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }}
+        label {{
+            width: 50px;
+            font-weight: bold;
+        }}
+        input[type=range] {{
+            flex: 1;
+            margin: 0 10px;
+        }}
+        .value {{
+            width: 30px;
+            text-align: right;
+            font-weight: bold;
+        }}
     </style>
 </head>
 <body>
-    <h2>LED Brightness Control</h2>
-
-    <div class="slider-container">
-        <span class="slider-label">LED1</span>
-        <input type="range" id="led1" min="0" max="100" value="{led_brightness[0]}" oninput="updateLED(1, this.value)">
-        <span id="val1" class="value-display">{led_brightness[0]}</span>
-    </div>
-
-    <div class="slider-container">
-        <span class="slider-label">LED2</span>
-        <input type="range" id="led2" min="0" max="100" value="{led_brightness[1]}" oninput="updateLED(2, this.value)">
-        <span id="val2" class="value-display">{led_brightness[1]}</span>
-    </div>
-
-    <div class="slider-container">
-        <span class="slider-label">LED3</span>
-        <input type="range" id="led3" min="0" max="100" value="{led_brightness[2]}" oninput="updateLED(3, this.value)">
-        <span id="val3" class="value-display">{led_brightness[2]}</span>
+    <div class="container">
+        <div class="row">
+            <label>LED1</label>
+            <input type="range" id="led1" min="0" max="100" value="0" oninput="updateLED(1, this.value)">
+            <span id="val1" class="value">0</span>
+        </div>
+        <div class="row">
+            <label>LED2</label>
+            <input type="range" id="led2" min="0" max="100" value="0" oninput="updateLED(2, this.value)">
+            <span id="val2" class="value">0</span>
+        </div>
+        <div class="row">
+            <label>LED3</label>
+            <input type="range" id="led3" min="0" max="100" value="0" oninput="updateLED(3, this.value)">
+            <span id="val3" class="value">0</span>
+        </div>
     </div>
 
     <script>
-        function updateLED(led, brightness) {{
-            document.getElementById('val' + led).textContent = brightness;
+        function updateLED(led, value) {{
+            document.getElementById('val' + led).innerText = value;
+
             fetch('/', {{
                 method: 'POST',
-                headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
-                body: 'led=' + led + '&brightness=' + brightness
+                headers: {{
+                    'Content-Type': 'application/json'
+                }},
+                body: JSON.stringify({{ led: led, brightness: value }})
             }})
-            .then(response => {{
-                if (!response.ok) {{
-                    console.error('Error del servidor:', response.statusText);
-                }}
+            .then(response => response.json())
+            .then(data => {{
+                document.getElementById('val1').innerText = data.leds[0];
+                document.getElementById('val2').innerText = data.leds[1];
+                document.getElementById('val3').innerText = data.leds[2];
             }})
-            .catch(err => console.error('Error de conexión:', err));
+            .catch(err => console.error('Error:', err));
         }}
     </script>
 </body>
 </html>
-""".format(led1=led_brightness[0], led2=led_brightness[1], led3=led_brightness[2])
-    return html
+"""
 
-
-# --- MANEJADOR DE SOLICITUDES HTTP ---
 class LEDHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        html = generate_html()
+        # Serve the HTML page
         self.send_response(200)
         self.send_header("Content-type", "text/html")
-        self.send_header("Content-length", str(len(html)))
         self.end_headers()
-        self.wfile.write(html.encode())
+        self.wfile.write(html_page.encode())
 
     def do_POST(self):
+        # Handle JSON POST requests from JS
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
-        params = urllib.parse.parse_qs(post_data.decode())
+        try:
+            data = json.loads(post_data.decode())
+            led = int(data.get('led', 0)) - 1
+            brightness = int(data.get('brightness', 0))
+            if 0 <= led < 3:
+                led_brightness[led] = brightness
+                pwms[led].ChangeDutyCycle(brightness)
+                print(f"→ LED {led+1} brightness set to {brightness}%")
+        except Exception as e:
+            print("Error:", e)
 
-        led = int(params.get('led', [1])[0]) - 1
-        brightness = int(params.get('brightness', [0])[0])
-
-        if 0 <= led < 3:
-            led_brightness[led] = brightness
-            pwms[led].ChangeDutyCycle(brightness)
-            print(f"→ LED {led+1} brightness set to {brightness}%")
+        # Respond with current LED brightness values
+        response = {'leds': led_brightness}
+        response_data = json.dumps(response).encode()
 
         self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.send_header("Content-length", str(len(response_data)))
         self.end_headers()
+        self.wfile.write(response_data)
 
-
-# --- FUNCIÓN PRINCIPAL ---
 def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
@@ -109,15 +134,12 @@ def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n🛑 Deteniendo servidor...")
+        print("\nStopping server...")
     finally:
         for pwm in pwms:
             pwm.stop()
         GPIO.cleanup()
         httpd.server_close()
-        print("💡 GPIO limpiado correctamente.")
 
-
-# --- INICIO ---
 if __name__ == "__main__":
     run()
