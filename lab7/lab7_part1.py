@@ -3,11 +3,11 @@ import socket
 
 # --- Configuración de los pines ---
 GPIO.setmode(GPIO.BCM)
-pins = [14, 15, 18]
+pins = [14, 15, 18]  # LEDs conectados a GPIO14, GPIO15, GPIO18
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
 
-# Inicializamos PWM a 1000 Hz (frecuencia típica para LED)
+# Inicializamos PWM a 1000 Hz
 pwms = [GPIO.PWM(p, 1000) for p in pins]
 for pwm in pwms:
     pwm.start(0)  # Comienza con 0% brillo
@@ -16,7 +16,9 @@ for pwm in pwms:
 led_brightness = [0, 0, 0]
 
 # --- Generar HTML dinámico ---
-def generate_html():
+def generate_html(selected_led=0):
+    slider_value = led_brightness[selected_led]
+
     html = f"""\
 <!DOCTYPE html>
 <html>
@@ -24,13 +26,13 @@ def generate_html():
 <body>
     <h3>Brightness level:</h3>
     <form method="POST" action="/">
-        <input type="range" name="brightness" min="0" max="100" value="50">
+        <input type="range" name="brightness" min="0" max="100" value="{slider_value}">
         <h3>Select LED:</h3>
-        <input type="radio" id="led1" name="led" value="1" checked>
+        <input type="radio" id="led1" name="led" value="1" {"checked" if selected_led==0 else ""}>
         <label for="led1">LED 1 ({led_brightness[0]}%)</label><br>
-        <input type="radio" id="led2" name="led" value="2">
+        <input type="radio" id="led2" name="led" value="2" {"checked" if selected_led==1 else ""}>
         <label for="led2">LED 2 ({led_brightness[1]}%)</label><br>
-        <input type="radio" id="led3" name="led" value="3">
+        <input type="radio" id="led3" name="led" value="3" {"checked" if selected_led==2 else ""}>
         <label for="led3">LED 3 ({led_brightness[2]}%)</label><br><br>
         <input type="submit" value="Change Brightness">
     </form>
@@ -38,6 +40,7 @@ def generate_html():
 </html>"""
     return html
 
+# --- Parsear datos del POST ---
 def parse_post_data(data):
     try:
         body = data.split("\r\n\r\n", 1)[1]
@@ -48,6 +51,7 @@ def parse_post_data(data):
     except Exception:
         return None, None
 
+# --- Servidor ---
 def start_server(host="0.0.0.0", port=8080):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((host, port))
@@ -57,16 +61,19 @@ def start_server(host="0.0.0.0", port=8080):
     try:
         while True:
             conn, addr = s.accept()
-            request = conn.recv(1024).decode()
+            request = conn.recv(4096).decode()  # Buffer mayor
+
+            selected_led = 0
 
             if "POST" in request:
                 led, brightness = parse_post_data(request)
                 if led is not None and 0 <= led < 3:
                     led_brightness[led] = brightness
                     pwms[led].ChangeDutyCycle(brightness)
+                    selected_led = led
                     print(f"→ LED {led+1} brightness set to {brightness}%")
 
-            html = generate_html()
+            html = generate_html(selected_led)
             response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n" + html
             conn.sendall(response.encode())
             conn.close()
@@ -75,7 +82,10 @@ def start_server(host="0.0.0.0", port=8080):
         print("\nStopping server...")
     finally:
         for pwm in pwms:
-            pwm.stop()
+            try:
+                pwm.stop()
+            except Exception:
+                pass
         GPIO.cleanup()
         s.close()
 
