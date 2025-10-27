@@ -1,18 +1,18 @@
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import RPi.GPIO as GPIO
-import socket
+import urllib.parse
 
 # --- Pines y PWM ---
 GPIO.setmode(GPIO.BCM)
 pins = [14, 15, 18]
 pwms = []
-
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
     pwm = GPIO.PWM(pin, 1000)
     pwm.start(0)
     pwms.append(pwm)
 
-led_brightness = [0, 0, 0]  # Estado inicial
+led_brightness = [0, 0, 0]  # Estado de los LEDs
 
 # --- HTML dinámico ---
 def generate_html(selected_led=0):
@@ -24,7 +24,7 @@ def generate_html(selected_led=0):
 <body>
 <h3>Brightness level:</h3>
 <form method="POST" action="/">
-    <input type="range" name="brightness" min="0" max="100" value="{slider_value}">
+    <input type="range" name="brightness" min="0" max="100" value="{slider_value}"><br>
     <h3>Select LED:</h3>
     <input type="radio" id="led1" name="led" value="1" {"checked" if selected_led==0 else ""}>
     <label for="led1">LED 1 ({led_brightness[0]}%)</label><br>
@@ -38,74 +38,54 @@ def generate_html(selected_led=0):
 </html>"""
     return html
 
-# --- Parsear POST ---
-def parse_post_data(data):
+# --- Handler HTTP ---
+class LEDHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        html = generate_html()
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.send_header("Content-length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+    def do_POST(self):
+        # Leer datos del formulario
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        params = urllib.parse.parse_qs(post_data.decode())
+
+        # Obtener LED y brillo
+        led = int(params.get('led', [1])[0]) - 1
+        brightness = int(params.get('brightness', [0])[0])
+
+        # Actualizar PWM
+        if 0 <= led < 3:
+            led_brightness[led] = brightness
+            pwms[led].ChangeDutyCycle(brightness)
+            print(f"→ LED {led+1} brightness set to {brightness}%")
+
+        # Responder con la página actualizada
+        html = generate_html(led)
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.send_header("Content-length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+# --- Servidor ---
+def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
+    server_address = ('', port)
+    httpd = server_class(server_address, handler_class)
+    print(f"Serving on http://localhost:{port}")
     try:
-        body = data.split("\r\n\r\n", 1)[1]
-        params = dict(param.split("=") for param in body.split("&"))
-        led = int(params.get("led", 1)) - 1
-        brightness = int(params.get("brightness", 0))
-        return led, brightness
-    except:
-        return None, None
-
-# --- Servidor TCP ---
-def start_server(host="0.0.0.0", port=8080):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((host, port))
-    s.listen(5)
-    print(f"Server running at http://{host}:{port}/")
-
-    try:
-        while True:
-            conn, addr = s.accept()
-
-            # Leer todo el request
-            request_data = b""
-            conn.settimeout(0.5)  # Evita bloqueo indefinido
-            try:
-                while True:
-                    chunk = conn.recv(1024)
-                    if not chunk:
-                        break
-                    request_data += chunk
-            except socket.timeout:
-                pass  # Terminamos de leer cuando no hay más datos
-
-            request = request_data.decode(errors="ignore")
-            selected_led = 0
-
-            # Procesar POST
-            if "POST" in request:
-                led, brightness = parse_post_data(request)
-                if led is not None and 0 <= led < 3:
-                    led_brightness[led] = brightness
-                    pwms[led].ChangeDutyCycle(brightness)
-                    selected_led = led
-                    print(f"→ LED {led+1} brightness set to {brightness}%")
-
-            # Generar respuesta HTTP
-            html = generate_html(selected_led)
-            response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}".format(len(html), html)
-
-            try:
-                conn.sendall(response.encode())
-            except BrokenPipeError:
-                print("Cliente cerró la conexión antes de recibir la respuesta")
-
-            conn.close()
-
+        httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping server...")
-
     finally:
         for pwm in pwms:
-            try:
-                pwm.stop()
-            except:
-                pass
+            pwm.stop()
         GPIO.cleanup()
-        s.close()
+        httpd.server_close()
 
 if __name__ == "__main__":
-    start_server()
+    run()
