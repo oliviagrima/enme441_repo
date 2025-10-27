@@ -18,17 +18,17 @@ led_brightness = [0, 0, 0]
 
 # --- FUNCIÓN PARA GENERAR LA PÁGINA HTML + JAVASCRIPT ---
 def generate_html():
-    html = """\
+    return f"""\
 <!DOCTYPE html>
 <html>
 <head>
     <title>LED Control</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
-        .slider-container { width: 300px; margin: 20px auto; text-align: left; }
-        .slider-label { display: inline-block; width: 50px; }
-        input[type=range] { width: 180px; vertical-align: middle; }
-        .value-display { display: inline-block; width: 40px; text-align: right; font-weight: bold; }
+        body {{ font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }}
+        .slider-container {{ width: 300px; margin: 20px auto; text-align: left; }}
+        .slider-label {{ display: inline-block; width: 50px; }}
+        input[type=range] {{ width: 180px; vertical-align: middle; }}
+        .value-display {{ display: inline-block; width: 40px; text-align: right; font-weight: bold; }}
     </style>
 </head>
 <body>
@@ -36,40 +36,37 @@ def generate_html():
 
     <div class="slider-container">
         <span class="slider-label">LED1</span>
-        <input type="range" id="led1" min="0" max="100" value="{led1}" oninput="updateLED(1, this.value)">
-        <span id="val1" class="value-display">{led1}</span>
+        <input type="range" id="led1" min="0" max="100" value="{led_brightness[0]}" oninput="updateLED(1, this.value)">
+        <span id="val1" class="value-display">{led_brightness[0]}</span>
     </div>
 
     <div class="slider-container">
         <span class="slider-label">LED2</span>
-        <input type="range" id="led2" min="0" max="100" value="{led2}" oninput="updateLED(2, this.value)">
-        <span id="val2" class="value-display">{led2}</span>
+        <input type="range" id="led2" min="0" max="100" value="{led_brightness[1]}" oninput="updateLED(2, this.value)">
+        <span id="val2" class="value-display">{led_brightness[1]}</span>
     </div>
 
     <div class="slider-container">
         <span class="slider-label">LED3</span>
-        <input type="range" id="led3" min="0" max="100" value="{led3}" oninput="updateLED(3, this.value)">
-        <span id="val3" class="value-display">{led3}</span>
+        <input type="range" id="led3" min="0" max="100" value="{led_brightness[2]}" oninput="updateLED(3, this.value)">
+        <span id="val3" class="value-display">{led_brightness[2]}</span>
     </div>
 
     <script>
-        function updateLED(led, brightness) {
-            // Actualiza el número al lado del slider
+        function updateLED(led, brightness) {{
             document.getElementById('val' + led).textContent = brightness;
-            
-            // Enviar POST al servidor sin recargar la página
-            fetch('/', {
+            fetch('/', {{
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
                 body: 'led=' + led + '&brightness=' + brightness
-            })
-            .then(response => {
-                if (!response.ok) {
+            }})
+            .then(response => {{
+                if (!response.ok) {{
                     console.error('Error del servidor:', response.statusText);
-                }
-            })
+                }}
+            }})
             .catch(err => console.error('Error de conexión:', err));
-        }
+        }}
     </script>
 </body>
 </html>
@@ -108,7 +105,7 @@ class LEDHandler(BaseHTTPRequestHandler):
 def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"✅ Servidor activo en http://localhost:{port}")
+    print(f"Serving on http://localhost:{port}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
