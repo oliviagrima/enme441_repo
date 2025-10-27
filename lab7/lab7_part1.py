@@ -1,3 +1,8 @@
+"""
+Olivia Grima
+ENME441 - Lab 7 Part 1
+"""
+
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import RPi.GPIO as GPIO
 import urllib.parse
