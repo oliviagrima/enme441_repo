@@ -2,19 +2,21 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import RPi.GPIO as GPIO
 import urllib.parse
 
-# --- Pines y PWM ---
+# --- CONFIGURACIÓN DE LOS PINES ---
 GPIO.setmode(GPIO.BCM)
-pins = [14, 15, 18]
+pins = [14, 15, 18]  # LED1, LED2, LED3
 pwms = []
 for pin in pins:
     GPIO.setup(pin, GPIO.OUT)
-    pwm = GPIO.PWM(pin, 1000)
+    pwm = GPIO.PWM(pin, 1000)  # Frecuencia 1 kHz
     pwm.start(0)
     pwms.append(pwm)
 
+# --- VALORES INICIALES ---
 led_brightness = [0, 0, 0]
 
-# --- Generar HTML con sliders ---
+
+# --- FUNCIÓN PARA GENERAR LA PÁGINA HTML + JAVASCRIPT ---
 def generate_html():
     html = """\
 <!DOCTYPE html>
@@ -52,12 +54,21 @@ def generate_html():
 
     <script>
         function updateLED(led, brightness) {
+            // Actualiza el número al lado del slider
             document.getElementById('val' + led).textContent = brightness;
+            
+            // Enviar POST al servidor sin recargar la página
             fetch('/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: 'led=' + led + '&brightness=' + brightness
-            }).catch(err => console.error(err));
+            })
+            .then(response => {
+                if (!response.ok) {
+                    console.error('Error del servidor:', response.statusText);
+                }
+            })
+            .catch(err => console.error('Error de conexión:', err));
         }
     </script>
 </body>
@@ -65,13 +76,14 @@ def generate_html():
 """.format(led1=led_brightness[0], led2=led_brightness[1], led3=led_brightness[2])
     return html
 
-# --- Handler ---
+
+# --- MANEJADOR DE SOLICITUDES HTTP ---
 class LEDHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         html = generate_html()
         self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.send_header("Content-Length", str(len(html)))
+        self.send_header("Content-type", "text/html")
+        self.send_header("Content-length", str(len(html)))
         self.end_headers()
         self.wfile.write(html.encode())
 
@@ -88,24 +100,27 @@ class LEDHandler(BaseHTTPRequestHandler):
             pwms[led].ChangeDutyCycle(brightness)
             print(f"→ LED {led+1} brightness set to {brightness}%")
 
-        # Responder con 200 OK (no se recarga la página)
         self.send_response(200)
         self.end_headers()
 
-# --- Servidor ---
+
+# --- FUNCIÓN PRINCIPAL ---
 def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"Serving on http://localhost:{port}")
+    print(f"✅ Servidor activo en http://localhost:{port}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping server...")
+        print("\n🛑 Deteniendo servidor...")
     finally:
         for pwm in pwms:
             pwm.stop()
         GPIO.cleanup()
         httpd.server_close()
+        print("💡 GPIO limpiado correctamente.")
 
+
+# --- INICIO ---
 if __name__ == "__main__":
     run()
