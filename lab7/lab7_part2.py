@@ -17,99 +17,98 @@ html_page = """\
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>LED Control (AJAX)</title>
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background: #fff;
-        }}
-        .container {{
-            border: 2px solid #000;
-            border-radius: 10px;
-            padding: 20px 40px;
-            display: inline-block;
-        }}
-        .row {{
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }}
-        label {{
-            width: 50px;
-            font-weight: bold;
-        }}
-        input[type=range] {{
-            flex: 1;
-            margin: 0 10px;
-        }}
-        .value {{
-            width: 30px;
-            text-align: right;
-            font-weight: bold;
-        }}
-    </style>
+<meta charset="UTF-8">
+<title>LED Control (AJAX)</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 40px;
+    background: #fff;
+}
+.container {
+    border: 2px solid #000;
+    border-radius: 10px;
+    padding: 20px 40px;
+    display: inline-block;
+}
+.row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+label {
+    width: 50px;
+    font-weight: bold;
+}
+input[type=range] {
+    flex: 1;
+    margin: 0 10px;
+}
+.value {
+    width: 30px;
+    text-align: right;
+    font-weight: bold;
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="row">
-            <label>LED1</label>
-            <input type="range" id="led1" min="0" max="100" value="0" oninput="updateLED(1, this.value)">
-            <span id="val1" class="value">0</span>
-        </div>
-        <div class="row">
-            <label>LED2</label>
-            <input type="range" id="led2" min="0" max="100" value="0" oninput="updateLED(2, this.value)">
-            <span id="val2" class="value">0</span>
-        </div>
-        <div class="row">
-            <label>LED3</label>
-            <input type="range" id="led3" min="0" max="100" value="0" oninput="updateLED(3, this.value)">
-            <span id="val3" class="value">0</span>
-        </div>
-    </div>
+<div class="container">
+  <div class="row">
+    <label>LED1</label>
+    <input type="range" id="led1" min="0" max="100" value="0" oninput="updateLED(1, this.value)">
+    <span id="val1" class="value">0</span>
+  </div>
+  <div class="row">
+    <label>LED2</label>
+    <input type="range" id="led2" min="0" max="100" value="0" oninput="updateLED(2, this.value)">
+    <span id="val2" class="value">0</span>
+  </div>
+  <div class="row">
+    <label>LED3</label>
+    <input type="range" id="led3" min="0" max="100" value="0" oninput="updateLED(3, this.value)">
+    <span id="val3" class="value">0</span>
+  </div>
+</div>
 
-    <script>
-        function updateLED(led, value) {{
-            document.getElementById('val' + led).innerText = value;
+<script>
+function updateLED(led, value) {
+    document.getElementById('val' + led).innerText = value;
 
-            fetch('/', {{
-                method: 'POST',
-                headers: {{
-                    'Content-Type': 'application/json'
-                }},
-                body: JSON.stringify({{ led: led, brightness: value }})
-            }})
-            .then(response => response.json())
-            .then(data => {{
-                document.getElementById('val1').innerText = data.leds[0];
-                document.getElementById('val2').innerText = data.leds[1];
-                document.getElementById('val3').innerText = data.leds[2];
-            }})
-            .catch(err => console.error('Error:', err));
-        }}
-    </script>
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ led: led, brightness: value })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('val1').innerText = data.leds[0];
+        document.getElementById('val2').innerText = data.leds[1];
+        document.getElementById('val3').innerText = data.leds[2];
+    })
+    .catch(err => console.error('Error:', err));
+}
+</script>
 </body>
 </html>
 """
 
 class LEDHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        # Serve the HTML page
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html_page.encode())
 
     def do_POST(self):
-        # Handle JSON POST requests from JS
-        content_length = int(self.headers['Content-Length'])
+        content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
+        print("Raw POST data:", post_data)  # debug
         try:
             data = json.loads(post_data.decode())
             led = int(data.get('led', 0)) - 1
-            brightness = int(data.get('brightness', 0))
+            brightness = int(float(data.get('brightness', 0)))
             if 0 <= led < 3:
                 led_brightness[led] = brightness
                 pwms[led].ChangeDutyCycle(brightness)
@@ -117,10 +116,8 @@ class LEDHandler(BaseHTTPRequestHandler):
         except Exception as e:
             print("Error:", e)
 
-        # Respond with current LED brightness values
         response = {'leds': led_brightness}
         response_data = json.dumps(response).encode()
-
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.send_header("Content-length", str(len(response_data)))
