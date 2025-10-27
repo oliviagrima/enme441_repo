@@ -2,7 +2,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import RPi.GPIO as GPIO
 import urllib.parse
 
-# --- Pines y PWM ---
 GPIO.setmode(GPIO.BCM)
 pins = [14, 15, 18]
 pwms = []
@@ -12,9 +11,8 @@ for pin in pins:
     pwm.start(0)
     pwms.append(pwm)
 
-led_brightness = [0, 0, 0]  # Estado de los LEDs
+led_brightness = [0, 0, 0]  
 
-# --- HTML dinámico ---
 def generate_html(selected_led=0):
     slider_value = led_brightness[selected_led]
     html = f"""\
@@ -38,7 +36,6 @@ def generate_html(selected_led=0):
 </html>"""
     return html
 
-# --- Handler HTTP ---
 class LEDHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         html = generate_html()
@@ -49,30 +46,26 @@ class LEDHandler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode())
 
     def do_POST(self):
-        # Leer datos del formulario
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
         params = urllib.parse.parse_qs(post_data.decode())
 
-        # Obtener LED y brillo
         led = int(params.get('led', [1])[0]) - 1
         brightness = int(params.get('brightness', [0])[0])
 
-        # Actualizar PWM
         if 0 <= led < 3:
             led_brightness[led] = brightness
             pwms[led].ChangeDutyCycle(brightness)
             print(f"→ LED {led+1} brightness set to {brightness}%")
-
-        # Responder con la página actualizada
+       
         html = generate_html(led)
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.send_header("Content-length", str(len(html)))
         self.end_headers()
+        # Send response body:
         self.wfile.write(html.encode())
 
-# --- Servidor ---
 def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
