@@ -1,3 +1,20 @@
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import RPi.GPIO as GPIO
+import urllib.parse
+
+# --- Pines y PWM ---
+GPIO.setmode(GPIO.BCM)
+pins = [14, 15, 18]
+pwms = []
+for pin in pins:
+    GPIO.setup(pin, GPIO.OUT)
+    pwm = GPIO.PWM(pin, 1000)
+    pwm.start(0)
+    pwms.append(pwm)
+
+led_brightness = [0, 0, 0]
+
+# --- Generar HTML con sliders ---
 def generate_html():
     html = """\
 <!DOCTYPE html>
@@ -35,21 +52,12 @@ def generate_html():
 
     <script>
         function updateLED(led, brightness) {
-            // Update number beside slider
             document.getElementById('val' + led).textContent = brightness;
-            
-            // Send async POST to server
             fetch('/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: 'led=' + led + '&brightness=' + brightness
-            })
-            .then(response => {
-                if (!response.ok) {
-                    console.error('Server error:', response.statusText);
-                }
-            })
-            .catch(err => console.error('Fetch error:', err));
+            }).catch(err => console.error(err));
         }
     </script>
 </body>
@@ -57,19 +65,47 @@ def generate_html():
 """.format(led1=led_brightness[0], led2=led_brightness[1], led3=led_brightness[2])
     return html
 
-def do_POST(self):
-    content_length = int(self.headers['Content-Length'])
-    post_data = self.rfile.read(content_length)
-    params = urllib.parse.parse_qs(post_data.decode())
+# --- Handler ---
+class LEDHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        html = generate_html()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html.encode())
 
-    led = int(params.get('led', [1])[0]) - 1
-    brightness = int(params.get('brightness', [0])[0])
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        params = urllib.parse.parse_qs(post_data.decode())
 
-    if 0 <= led < 3:
-        led_brightness[led] = brightness
-        pwms[led].ChangeDutyCycle(brightness)
-        print(f"→ LED {led+1} brightness set to {brightness}%")
+        led = int(params.get('led', [1])[0]) - 1
+        brightness = int(params.get('brightness', [0])[0])
 
-    # Respond with simple OK (no HTML refresh needed)
-    self.send_response(200)
-    self.end_headers()
+        if 0 <= led < 3:
+            led_brightness[led] = brightness
+            pwms[led].ChangeDutyCycle(brightness)
+            print(f"→ LED {led+1} brightness set to {brightness}%")
+
+        # Responder con 200 OK (no se recarga la página)
+        self.send_response(200)
+        self.end_headers()
+
+# --- Servidor ---
+def run(server_class=HTTPServer, handler_class=LEDHandler, port=8080):
+    server_address = ('', port)
+    httpd = server_class(server_address, handler_class)
+    print(f"Serving on http://localhost:{port}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+    finally:
+        for pwm in pwms:
+            pwm.stop()
+        GPIO.cleanup()
+        httpd.server_close()
+
+if __name__ == "__main__":
+    run()
