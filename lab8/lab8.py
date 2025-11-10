@@ -55,18 +55,21 @@ class Stepper:
 
     # Move a single +/-1 step in the motor sequence:
     def __step(self, dir):
-        self.step_state += dir    # increment/decrement the step
-        self.step_state %= 8      # ensure result stays in [0,7]
-        # Clear only this motor's 4 bits
-        Stepper.shifter_outputs &= ~(0b1111 << self.shifter_bit_start)
-        # Set this motor's bits using the current step in the sequence
-        Stepper.shifter_outputs |= Stepper.seq[self.step_state] << self.shifter_bit_start
-        # Send updated bitmask to shift register
-        self.s.shiftByte(Stepper.shifter_outputs)
-        # Update angle
-        with self.angle.get_lock():
-            self.angle.value += dir / Stepper.steps_per_degree
-            self.angle.value %= 360
+        with self.lock:  # synchronize access to the shift register
+            self.step_state = (self.step_state + dir) % 8
+
+            # Clear only this motor's bits
+            Stepper.shifter_outputs &= ~(0b1111 << self.shifter_bit_start)
+
+            # Set this motor's bits
+            Stepper.shifter_outputs |= Stepper.seq[self.step_state] << self.shifter_bit_start
+
+            # Send updated bitmask to the shift register
+            self.s.shiftByte(Stepper.shifter_outputs)
+
+            # Update angle safely
+            with self.angle.get_lock():
+                self.angle.value = (self.angle.value + dir / Stepper.steps_per_degree) % 360
 
 
     # Move relative angle from current position:
@@ -117,12 +120,10 @@ if __name__ == '__main__':
 
     # Use multiprocessing.Lock() to prevent motors from trying to 
     # execute multiple operations at the same time:
-    lock1 = multiprocessing.Lock()
-    lock2 = multiprocessing.Lock()
+    lock = multiprocessing.Lock()
+    m1 = Stepper(s, lock)
+    m2 = Stepper(s, lock)
 
-    # Instantiate 2 Steppers:
-    m1 = Stepper(s, lock1)
-    m2 = Stepper(s, lock2)
 
     m1.zero()
     m2.zero()
