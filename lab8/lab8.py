@@ -1,3 +1,8 @@
+"""
+Olivia Grima and Sumeya Kemal
+ENME441 - Lab 8
+"""
+
 # stepper_class_shiftregister_multiprocessing.py
 #
 # Stepper class
@@ -74,13 +79,13 @@ class Stepper:
 
     # Move relative angle from current position:
     def __rotate(self, delta):
-        self.lock.acquire()                 # wait until the lock is available
-        numSteps = int(Stepper.steps_per_degree * abs(delta))    # find the right # of steps
-        dir = self.__sgn(delta)        # find the direction (+/-1)
-        for s in range(numSteps):      # take the steps
-            self.__step(dir)
-            time.sleep(Stepper.delay/1e6)
-        self.lock.release()
+        numSteps = int(Stepper.steps_per_degree * abs(delta))
+        dir = self.__sgn(delta)
+
+        for _ in range(numSteps):
+            self.__step(dir)  # la sincronización ocurre dentro de __step()
+            time.sleep(Stepper.delay / 1e6)
+
 
     # Move relative angle from current position:
     def rotate(self, delta):
