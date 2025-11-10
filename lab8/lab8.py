@@ -60,21 +60,19 @@ class Stepper:
 
     # Move a single +/-1 step in the motor sequence:
     def __step(self, dir):
-        self.step_state = (self.step_state + dir) % 8
-
-        # Create a mask for the 4 bits of this motor
-        mask = 0b1111 << self.shifter_bit_start
-        new_bits = Stepper.seq[self.step_state] << self.shifter_bit_start
-
-        # Lock this motor while updating its bits in the shared register
-        with self.lock:
-            # Only modify the bits of this motor, leave others unchanged
-            Stepper.shifter_outputs = (Stepper.shifter_outputs & ~mask) | new_bits
-            self.s.shiftByte(Stepper.shifter_outputs)
-
-        # Update the current angle safely
+        self.step_state += dir    # increment/decrement the step
+        self.step_state %= 8      # ensure result stays in [0,7]
+        # Clear only this motor's 4 bits
+        Stepper.shifter_outputs &= ~(0b1111 << self.shifter_bit_start)
+        # Set this motor's bits using the current step in the sequence
+        Stepper.shifter_outputs |= Stepper.seq[self.step_state] << self.shifter_bit_start
+        # Send updated bitmask to shift register
+        self.s.shiftByte(Stepper.shifter_outputs)
+        # Update angle
         with self.angle.get_lock():
-            self.angle.value = (self.angle.value + dir / Stepper.steps_per_degree) % 360
+            self.angle.value += dir / Stepper.steps_per_degree
+            self.angle.value %= 360
+
 
     # Move relative angle from current position:
     def __rotate(self, delta):
@@ -108,10 +106,13 @@ class Stepper:
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
 
+
+
     # Set the motor zero point
     def zero(self):
         with self.angle.get_lock():
             self.angle.value = 0.0
+
 
 # Example use:
 
