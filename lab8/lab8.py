@@ -60,32 +60,33 @@ class Stepper:
 
     # Move a single +/-1 step in the motor sequence:
     def __step(self, dir):
-        with self.lock:  # synchronize access to the shift register
-            self.step_state = (self.step_state + dir) % 8
+        self.step_state = (self.step_state + dir) % 8
 
-            # Clear only this motor's bits
-            Stepper.shifter_outputs &= ~(0b1111 << self.shifter_bit_start)
+        # Protege la modificación de este motor en los bits compartidos
+        # usando solo operaciones bitwise locales (sin afectar los demás)
+        mask = 0b1111 << self.shifter_bit_start   # máscara de los 4 bits de este motor
+        new_bits = Stepper.seq[self.step_state] << self.shifter_bit_start
 
-            # Set this motor's bits
-            Stepper.shifter_outputs |= Stepper.seq[self.step_state] << self.shifter_bit_start
-
-            # Send updated bitmask to the shift register
+        # Bloquea el registro mientras actualizas los bits de este motor
+        # Usando un lock local para evitar colisión entre pasos del mismo motor
+        with self.lock:
+            Stepper.shifter_outputs = (Stepper.shifter_outputs & ~mask) | new_bits
             self.s.shiftByte(Stepper.shifter_outputs)
 
-            # Update angle safely
-            with self.angle.get_lock():
-                self.angle.value = (self.angle.value + dir / Stepper.steps_per_degree) % 360
+        # Actualiza el ángulo
+        with self.angle.get_lock():
+            self.angle.value = (self.angle.value + dir / Stepper.steps_per_degree) % 360
 
 
     # Move relative angle from current position:
     def __rotate(self, delta):
-        numSteps = int(Stepper.steps_per_degree * abs(delta))
-        dir = self.__sgn(delta)
-
-        for _ in range(numSteps):
-            self.__step(dir)  # la sincronización ocurre dentro de __step()
-            time.sleep(Stepper.delay / 1e6)
-
+        self.lock.acquire()                 # wait until the lock is available
+        numSteps = int(Stepper.steps_per_degree * abs(delta))    # find the right # of steps
+        dir = self.__sgn(delta)        # find the direction (+/-1)
+        for s in range(numSteps):      # take the steps
+            self.__step(dir)
+            time.sleep(Stepper.delay/1e6)
+        self.lock.release()
 
     # Move relative angle from current position:
     def rotate(self, delta):
@@ -109,13 +110,10 @@ class Stepper:
         p = multiprocessing.Process(target=self.__rotate, args=(delta,))
         p.start()
 
-
-
     # Set the motor zero point
     def zero(self):
         with self.angle.get_lock():
             self.angle.value = 0.0
-
 
 # Example use:
 
@@ -125,10 +123,12 @@ if __name__ == '__main__':
 
     # Use multiprocessing.Lock() to prevent motors from trying to 
     # execute multiple operations at the same time:
-    lock = multiprocessing.Lock()
-    m1 = Stepper(s, lock)
-    m2 = Stepper(s, lock)
+    lock1 = multiprocessing.Lock()
+    lock2 = multiprocessing.Lock()
 
+    # Instantiate 2 Steppers:
+    m1 = Stepper(s, lock1)
+    m2 = Stepper(s, lock2)
 
     m1.zero()
     m2.zero()
